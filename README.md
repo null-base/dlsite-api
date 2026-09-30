@@ -46,6 +46,16 @@ If Wrangler is installed globally or already on `PATH`, the deploy command is si
 
 The project has a `wrangler.jsonc` entry point and no required KV, Durable Object, secret, or build step. `wrangler deploy` bundles the TypeScript Worker. Cache API operations require a supported Worker domain; local development remains functional when the cache is unavailable.
 
+### Troubleshooting upstream connectivity
+
+`Could not connect to DLsite.` means the Worker's outbound `fetch()` threw before receiving an HTTP response; it is different from an upstream HTTP 403/5xx response. After deploying, inspect the Worker logs with:
+
+```sh
+bunx wrangler tail dlsite-public-api
+```
+
+Look for `DLsite upstream fetch failed`. The log records the error name, a sanitized message, elapsed time, and endpoint path with search terms and IDs redacted. `DLsite request timed out.` indicates the 12-second upstream timeout was reached. These details help distinguish a timeout from a DNS, TLS, or other connection failure.
+
 ## API endpoints
 
 All routes are read-only `GET` requests.

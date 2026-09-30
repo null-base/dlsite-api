@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'bun:test';
 import { createApp } from '../src';
-import type { Fetcher } from '../src/dlsite/client';
+import { DlsiteClient, type Fetcher } from '../src/dlsite/client';
 import type { ResponseCache } from '../src/cache';
 
 const searchHtml = await readFile(new URL('./fixtures/search.html', import.meta.url), 'utf8');
@@ -46,6 +46,26 @@ function fixtureFetcher(onFetch?: (url: URL) => void): Fetcher {
 }
 
 describe('REST routes', () => {
+  it('calls the default fetch implementation with the global receiver', async () => {
+    const originalFetch = globalThis.fetch;
+    let fetchThis: unknown;
+    globalThis.fetch = Object.assign(
+      function (this: typeof globalThis, _input: RequestInfo | URL): Promise<Response> {
+        fetchThis = this;
+        return Promise.resolve(new Response('<html></html>'));
+      },
+      { preconnect: originalFetch.preconnect },
+    );
+
+    try {
+      const client = new DlsiteClient();
+      await client.html(client.url('/maniax/ranking/day/'), 'page');
+      expect(fetchThis).toBe(globalThis);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('returns a normalized work and uses the public JSON endpoints', async () => {
     const requested: URL[] = [];
     const app = createApp({ fetcher: fixtureFetcher((url) => requested.push(url)), cache: new MemoryCache() });
@@ -126,6 +146,29 @@ describe('REST routes', () => {
     expect(await response.json() as unknown).toEqual({
       error: { code: 'RATE_LIMITED', message: 'DLsite temporarily rate limited the request.' },
     });
+  });
+
+  it('maps network failures to DLSITE_UNAVAILABLE and redacts search terms from diagnostics', async () => {
+    const logs: unknown[][] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => { logs.push(args); };
+    try {
+      const disconnectedFetcher: Fetcher = async () => {
+        throw new TypeError('fetch failed for https://www.dlsite.com/maniax/fsr/=/keyword/private-term/order[0]');
+      };
+      const app = createApp({ fetcher: disconnectedFetcher });
+      const response = await app.request('/v1/search?keyword=private-term');
+
+      expect(response.status).toBe(503);
+      expect(await response.json() as unknown).toEqual({
+        error: { code: 'DLSITE_UNAVAILABLE', message: 'Could not connect to DLsite.' },
+      });
+      expect(logs).toHaveLength(1);
+      expect(JSON.stringify(logs[0])).not.toContain('private-term');
+      expect((logs[0]?.[1] as { path?: string }).path).toContain('/keyword/[redacted]/');
+    } finally {
+      console.error = originalError;
+    }
   });
 
   it('caches successful GET responses using the injected Cache API-compatible store', async () => {

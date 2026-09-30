@@ -25,7 +25,7 @@ export interface CircleWorkListingResult extends DlsiteListingResult {
 }
 
 export class DlsiteClient {
-  constructor(private readonly fetcher: Fetcher = fetch) {}
+  constructor(private readonly fetcher: Fetcher = (input, init) => globalThis.fetch(input, init)) {}
 
   url(path: string): URL {
     return new URL(path, `${DLSITE_ORIGIN}/`);
@@ -71,6 +71,7 @@ export class DlsiteClient {
 
   private async request(url: URL, resource: UpstreamResource): Promise<Response> {
     let response: Response;
+    const startedAt = Date.now();
     try {
       response = await this.fetcher(url, {
         headers: {
@@ -81,8 +82,30 @@ export class DlsiteClient {
         redirect: 'follow',
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
-    } catch {
-      throw new ApiError(503, 'DLSITE_UNAVAILABLE', 'Could not connect to DLsite.');
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : 'UnknownError';
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const timedOut = errorName === 'TimeoutError' || /timed out|timeout/i.test(errorMessage);
+      const safePath = url.pathname
+        .replace(/\/keyword\/[^/]+/g, '/keyword/[redacted]')
+        .replace(/\/maker_id\/[^/.]+/g, '/maker_id/[redacted]')
+        .replace(/\/product_id\/[^/.]+/g, '/product_id/[redacted]');
+      const safeMessage = errorMessage.replace(/https?:\/\/[^\s"']+/g, '[upstream URL]');
+
+      console.error('DLsite upstream fetch failed', {
+        host: url.host,
+        path: safePath,
+        resource,
+        elapsedMs: Date.now() - startedAt,
+        errorName,
+        errorMessage: safeMessage,
+      });
+
+      throw new ApiError(
+        503,
+        'DLSITE_UNAVAILABLE',
+        timedOut ? 'DLsite request timed out.' : 'Could not connect to DLsite.',
+      );
     }
 
     if (!response.ok) throw upstreamStatusError(response.status, resource);

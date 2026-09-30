@@ -46,6 +46,16 @@ Wranglerをグローバルにインストール済み、または `PATH` に設�
 
 `wrangler.jsonc` にWorkerのエントリーポイントを設定しています。KV、Durable Object、シークレット、ビルド手順は不要です。キャッシュAPIが利用できないローカル環境でも動作します。
 
+### 上流への接続エラーを調べる
+
+`Could not connect to DLsite.` は、HTTPレスポンスを受け取る前にWorkerの外向き `fetch()` が例外になった場合のメッセージです。DLsiteからHTTP 403や5xxが返った場合とは異なります。デプロイ後、次のコマンドでWorkerログを確認してください。
+
+```sh
+bunx wrangler tail dlsite-public-api
+```
+
+`DLsite upstream fetch failed` を探します。ログにはエラー名、URLを除去したメッセージ、所要時間、検索語やIDを伏せたパスが記録されます。`DLsite request timed out.` の場合は上流リクエストが12秒でタイムアウトしています。ログからタイムアウト、DNS、TLSなどの接続失敗を切り分けられます。
+
 ## APIエンドポイント
 
 すべて読み取り専用の `GET` リクエストです。
