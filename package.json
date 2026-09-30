@@ -1,0 +1,27 @@
+{
+  "name": "dlsite-public-api",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "bun@1.4.2",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "bun test",
+    "test:integration": "DLSITE_LIVE_TESTS=1 bun test tests/integration",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.6.3",
+    "@scalar/hono-api-reference": "^0.12.7",
+    "hono": "^4.13.11",
+    "linkedom": "^0.18.13",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260929.1",
+    "@types/bun": "^1.4.2",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.143.1"
+  }
+}
